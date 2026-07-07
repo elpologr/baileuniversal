@@ -790,11 +790,6 @@
             </div>
 
             <div class="modal-detalles-derecha">
-                <!-- SECCIÓN MIS MEJORES VIDEOS (fija, arriba del menú) -->
-                <div id="seccionMejoresVideos" style="padding:20px 20px 0 20px; flex-shrink:0; border-bottom:1px solid #1e1e1e;">
-                    <p style="margin:0 0 12px 0; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:2px; color:#cd8433;">🏆 Mis Mejores Videos</p>
-                    <div id="gridMejoresVideos" style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding-bottom:16px;"></div>
-                </div>
                 <div class="menu-sub-pestanas" style="grid-template-columns: repeat(4, 1fr);">
                     <button id="btnBlogBiografia" class="btn-sub-pestana activo" onclick="cambiarSubPestana('biografia')">Biografía</button>
                     <button id="btnBlogVideos" class="btn-sub-pestana" onclick="cambiarSubPestana('videos')">Videos</button>
@@ -854,22 +849,42 @@
             return "";
         }
 
-        // --- Separadores para las columnas de listas (L, M, N, O, P) ---
-        // Usamos coma "," o barra vertical "|" como separadores. OJO: aunque se pidió
-        // soportar también "/", "-" y "_", esos caracteres ya forman parte de los
-        // links de YouTube/imgBB (ej: https://youtu.be/Abc-123_xyz) y usarlos como
-        // separador rompería los enlaces. Por seguridad, usa siempre "," o "|" en
-        // estas columnas para separar varios elementos dentro de la misma celda.
-        function dividirLista(celda) {
-            if (!celda) return [];
-            const partes = celda.includes("|") ? celda.split("|") : celda.split(",");
-            return partes.map(p => p.trim()).filter(p => p !== "");
+        // --- Columna "Youtube": lista unificada de videos, proyectos e imágenes ---
+        // Cada entrada de la celda tiene el formato:
+        //   URL (Descripción) (Tipo)
+        // donde Tipo puede ser: Casual, Profesional/Profecional, Proyecto, Imagen.
+        // Varias entradas se separan con " = " (espacio, igual, espacio).
+        //
+        // OJO: el separador es " = " CON ESPACIOS a propósito, y no un "=" suelto,
+        // porque los links de YouTube compartidos desde el celular suelen incluir
+        // su propio "=" sin espacios (ej: https://youtu.be/abc123?si=xyz). Si
+        // separáramos por cualquier "=" el link se rompería a la mitad. Al exigir
+        // espacios alrededor del separador, el "=" interno del link nunca coincide.
+        function normalizarTipoMultimedia(tipo) {
+            const t = normalizarClave(tipo);
+            if (t.includes("casual")) return "casual";
+            if (t.includes("profesional") || t.includes("profecional")) return "profesional";
+            if (t.includes("proyecto")) return "proyecto";
+            if (t.includes("imagen")) return "imagen";
+            return "";
         }
 
-        // Proyectos y su descripción (columnas Q y R) usan obligatoriamente "=" como separador.
-        function dividirPorIgual(celda) {
+        function parseEntradasMultimedia(celda) {
             if (!celda) return [];
-            return celda.split("=").map(p => p.trim()).filter(p => p !== "");
+            return celda.split(/\s=\s/)
+                .map(bloque => bloque.trim())
+                .filter(bloque => bloque !== "")
+                .map(bloque => {
+                    // Captura: URL, (Descripción), (Tipo) — en ese orden, al final del bloque.
+                    const match = bloque.match(/^(.*?)\s*\(([^)]*)\)\s*\(([^)]*)\)\s*$/);
+                    if (!match) return null;
+                    return {
+                        url: match[1].trim(),
+                        descripcion: match[2].trim(),
+                        tipo: normalizarTipoMultimedia(match[3])
+                    };
+                })
+                .filter(item => item !== null);
         }
 
         function extraerIdYoutube(url) {
@@ -900,10 +915,10 @@
             return (base || "artista") + "-" + indice;
         }
 
-        function construirRedesDesdeFila(fila) {
+        function construirRedesDesdeFila(fila, urlYoutubePrincipal) {
             const redes = [];
             const mapa = [
-                { nombre: "YouTube", url: obtenerCampo(fila, ["Youtube", "YouTube"]) },
+                { nombre: "YouTube", url: urlYoutubePrincipal || "" },
                 { nombre: "Facebook", url: obtenerCampo(fila, ["Facebook"]) },
                 { nombre: "Instagram", url: obtenerCampo(fila, ["Instagram"]) },
                 { nombre: "TikTok", url: obtenerCampo(fila, ["TikTok", "Tiktok"]) }
@@ -927,26 +942,21 @@
                         const nombre = obtenerCampo(fila, ["Nombre"]).trim();
                         const biografia = obtenerCampo(fila, ["Biografia", "Biografía"]).trim();
 
-                        const urlsMejoresVideos = dividirLista(obtenerCampo(fila, ["Mejores Videos submenu"])).slice(0, 5);
-                        const mejoresVideos = urlsMejoresVideos.map(url => {
-                            const idYt = extraerIdYoutube(url);
-                            return { url, titulo: "Ver video", miniatura: idYt ? `https://img.youtube.com/vi/${idYt}/hqdefault.jpg` : "" };
-                        });
+                        const entradasMultimedia = parseEntradasMultimedia(obtenerCampo(fila, ["Youtube", "YouTube"]));
 
-                        const urlsVideos = dividirLista(obtenerCampo(fila, ["Videos submenu"]));
-                        const categoriasVideos = dividirLista(obtenerCampo(fila, ["Profecional/Casual", "Profesional/Casual"]));
-                        const videos = urlsVideos.map((url, i) => {
-                            const cat = (categoriasVideos[i] || "").toLowerCase();
-                            return { url, categoria: cat.includes("casual") ? "casual" : "profesional" };
-                        });
+                        const videos = entradasMultimedia
+                            .filter(item => item.tipo === "profesional" || item.tipo === "casual")
+                            .map(item => ({ url: item.url, categoria: item.tipo, descripcion: item.descripcion }));
 
-                        const urlsImagenes = dividirLista(obtenerCampo(fila, ["Imagenes submenu", "Imágenes submenu"]));
-                        const descImagenes = dividirLista(obtenerCampo(fila, ["Descripcion Imagen", "Descripción Imagen"]));
-                        const imagenes = urlsImagenes.map((src, i) => ({ src, descripcion: descImagenes[i] || "" }));
+                        const imagenes = entradasMultimedia
+                            .filter(item => item.tipo === "imagen")
+                            .map(item => ({ src: item.url, descripcion: item.descripcion }));
 
-                        const nombresProyectos = dividirPorIgual(obtenerCampo(fila, ["Proyectos"]));
-                        const descProyectos = dividirPorIgual(obtenerCampo(fila, ["Descripcion Proyecto", "Descripción Proyecto"]));
-                        const proyectos = nombresProyectos.map((nom, i) => ({ nombre: nom, descripcion: descProyectos[i] || "" }));
+                        const proyectos = entradasMultimedia
+                            .filter(item => item.tipo === "proyecto")
+                            .map(item => ({ url: item.url, descripcion: item.descripcion }));
+
+                        const urlYoutubePrincipal = entradasMultimedia.length > 0 ? entradasMultimedia[0].url : "";
 
                         return {
                             id: generarIdDesdeNombre(nombre, indice + 1),
@@ -956,9 +966,8 @@
                             pais: obtenerCampo(fila, ["Pais", "País"]).trim(),
                             estado: obtenerCampo(fila, ["Estado"]).trim(),
                             ciudad: obtenerCampo(fila, ["Ciudad"]).trim(),
-                            redes: construirRedesDesdeFila(fila),
+                            redes: construirRedesDesdeFila(fila, urlYoutubePrincipal),
                             historia: biografia ? [{ texto: biografia }] : [],
-                            mejoresVideos: mejoresVideos,
                             videos: videos,
                             imagenes: imagenes,
                             proyectos: proyectos,
@@ -1154,12 +1163,24 @@
             }
 
             cambiarSubPestana('biografia');
-            cargarMejoresVideos(b);
             document.getElementById("visorModal").style.display = "flex";
             if (window.innerWidth > 750) document.body.style.overflow = "hidden";
         }
 
         let videosCategoriaActualLista = { profesional: [], casual: [] };
+        const ELEMENTOS_POR_PAGINA = 6;
+        let cantidadVisibleVideos = ELEMENTOS_POR_PAGINA;
+        let cantidadVisibleImagenes = ELEMENTOS_POR_PAGINA;
+        let cantidadVisibleProyectos = ELEMENTOS_POR_PAGINA;
+
+        // Pinta un botón "Ver más" si aún quedan elementos ocultos de la lista.
+        function botonVerMasHtml(totalElementos, cantidadMostrada, onClickJs) {
+            if (totalElementos <= cantidadMostrada) return "";
+            return `<button onclick="${onClickJs}"
+                style="display:block;width:100%;margin-top:10px;background:transparent;color:#cd8433;border:2px solid #cd8433;border-radius:10px;padding:12px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;cursor:pointer;">
+                Ver más
+            </button>`;
+        }
 
         function cambiarSubPestana(seccion) {
             ["btnBlogBiografia","btnBlogVideos","btnBlogImagenes","btnBlogProyectos"].forEach(id => {
@@ -1206,28 +1227,14 @@
             }
 
             if (seccion === 'imagenes') {
-                if (!b.imagenes || b.imagenes.length === 0) { areaContenido.innerHTML = `<p style="color:#666;font-style:italic;">No hay imágenes publicadas.</p>`; return; }
-                const grid = document.createElement("div");
-                grid.style.cssText = "display:grid;grid-template-columns:repeat(2,1fr);gap:10px;";
-                b.imagenes.forEach(img => {
-                    grid.innerHTML += `<div style="border-radius:8px;overflow:hidden;background:#161616;border:1px solid #222;">
-                        <img src="${img.src}" alt="${img.descripcion}" style="width:100%;height:140px;object-fit:cover;display:block;" onerror="this.style.display='none'">
-                        <p style="margin:0;padding:8px 10px;font-size:12px;color:#888;">${img.descripcion}</p>
-                    </div>`;
-                });
-                areaContenido.appendChild(grid);
+                cantidadVisibleImagenes = ELEMENTOS_POR_PAGINA;
+                renderizarImagenes(b, areaContenido);
                 return;
             }
 
             if (seccion === 'proyectos') {
-                if (!b.proyectos || b.proyectos.length === 0) { areaContenido.innerHTML = `<p style="color:#666;font-style:italic;">No hay proyectos registrados.</p>`; return; }
-                b.proyectos.forEach(pro => {
-                    areaContenido.innerHTML += `
-                        <div class="tarjeta-proyecto-blog" style="margin-bottom:15px;">
-                            <h3>${pro.nombre}</h3>
-                            <p>${pro.descripcion}</p>
-                        </div>`;
-                });
+                cantidadVisibleProyectos = ELEMENTOS_POR_PAGINA;
+                renderizarProyectos(b, areaContenido);
                 return;
             }
         }
@@ -1244,39 +1251,72 @@
                 if (btnCasual) { btnCasual.style.background='#cd8433'; btnCasual.style.color='#fff'; btnCasual.style.borderColor='#cd8433'; }
                 if (btnPro) { btnPro.style.background='#1a1a1a'; btnPro.style.color='#888'; btnPro.style.borderColor='#222'; }
             }
+            cantidadVisibleVideos = ELEMENTOS_POR_PAGINA;
+            renderizarVideosCategoria(tipo, contenedor);
+        }
+
+        function renderizarVideosCategoria(tipo, contenedor) {
             const lista = videosCategoriaActualLista[tipo] || [];
             contenedor.innerHTML = "";
             if (lista.length === 0) {
                 contenedor.innerHTML = `<p style="color:#666;font-style:italic;">No hay videos en esta categoría.</p>`;
                 return;
             }
-            lista.forEach(vid => {
-                contenedor.innerHTML += `<div class="tarjeta-video-blog"><a href="${vid.url}" target="_blank" class="btn-ver-video"><i class="fa-brands fa-youtube"></i> Ver video</a></div>`;
+            lista.slice(0, cantidadVisibleVideos).forEach(vid => {
+                contenedor.innerHTML += `
+                    <div class="tarjeta-video-blog">
+                        <a href="${vid.url}" target="_blank" class="btn-ver-video"><i class="fa-brands fa-youtube"></i> Ver video</a>
+                        ${vid.descripcion ? `<p style="margin:6px 0 0 0;font-size:12px;color:#888;line-height:1.5;">${vid.descripcion}</p>` : ""}
+                    </div>`;
             });
+            contenedor.innerHTML += botonVerMasHtml(lista.length, cantidadVisibleVideos, `verMasVideos('${tipo}')`);
         }
 
-        function cargarMejoresVideos(b) {
-            const grid = document.getElementById("gridMejoresVideos");
-            if (!grid) return;
-            grid.innerHTML = "";
-            const lista = b.mejoresVideos || [];
-            for (let i = 0; i < 5; i++) {
-                const vid = lista[i] || null;
-                if (vid && vid.url) {
-                    grid.innerHTML += `
-                        <a href="${vid.url}" target="_blank" style="display:block;text-decoration:none;border-radius:6px;overflow:hidden;border:1px solid #2a2a2a;background:#161616;transition:border-color 0.2s;" onmouseover="this.style.borderColor='#cd8433'" onmouseout="this.style.borderColor='#2a2a2a'">
-                            <div style="width:100%;aspect-ratio:16/9;background:#0d0d0d;overflow:hidden;">
-                                <img src="${vid.miniatura || ''}" alt="${vid.titulo || ''}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
-                            </div>
-                            <p style="margin:0;padding:5px 6px;font-size:10px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${vid.titulo || 'Ver video'}</p>
-                        </a>`;
-                } else {
-                    grid.innerHTML += `
-                        <div style="border-radius:6px;border:1px dashed #2a2a2a;background:#0d0d0d;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;">
-                            <span style="color:#333;font-size:18px;">+</span>
-                        </div>`;
-                }
-            }
+        function verMasVideos(tipo) {
+            cantidadVisibleVideos += ELEMENTOS_POR_PAGINA;
+            renderizarVideosCategoria(tipo, document.getElementById("listaVideosCategoria"));
+        }
+
+        function renderizarImagenes(b, areaContenido) {
+            const lista = b.imagenes || [];
+            areaContenido.innerHTML = "";
+            if (lista.length === 0) { areaContenido.innerHTML = `<p style="color:#666;font-style:italic;">No hay imágenes publicadas.</p>`; return; }
+            const grid = document.createElement("div");
+            grid.style.cssText = "display:grid;grid-template-columns:repeat(2,1fr);gap:10px;";
+            lista.slice(0, cantidadVisibleImagenes).forEach(img => {
+                grid.innerHTML += `<div style="border-radius:8px;overflow:hidden;background:#161616;border:1px solid #222;">
+                    <img src="${img.src}" alt="${img.descripcion}" style="width:100%;height:140px;object-fit:cover;display:block;" onerror="this.style.display='none'">
+                    <p style="margin:0;padding:8px 10px;font-size:12px;color:#888;">${img.descripcion}</p>
+                </div>`;
+            });
+            areaContenido.appendChild(grid);
+            areaContenido.innerHTML += botonVerMasHtml(lista.length, cantidadVisibleImagenes, "verMasImagenes()");
+        }
+
+        function verMasImagenes() {
+            cantidadVisibleImagenes += ELEMENTOS_POR_PAGINA;
+            const b = bailarines.find(item => item.id === idArtistaSeleccionadoActivo);
+            if (b) renderizarImagenes(b, document.getElementById("areaContenidoBlog"));
+        }
+
+        function renderizarProyectos(b, areaContenido) {
+            const lista = b.proyectos || [];
+            areaContenido.innerHTML = "";
+            if (lista.length === 0) { areaContenido.innerHTML = `<p style="color:#666;font-style:italic;">No hay proyectos registrados.</p>`; return; }
+            lista.slice(0, cantidadVisibleProyectos).forEach(pro => {
+                areaContenido.innerHTML += `
+                    <div class="tarjeta-proyecto-blog" style="margin-bottom:15px;">
+                        <p>${pro.descripcion}</p>
+                        <a href="${pro.url}" target="_blank" class="btn-ver-video">Ver más</a>
+                    </div>`;
+            });
+            areaContenido.innerHTML += botonVerMasHtml(lista.length, cantidadVisibleProyectos, "verMasProyectos()");
+        }
+
+        function verMasProyectos() {
+            cantidadVisibleProyectos += ELEMENTOS_POR_PAGINA;
+            const b = bailarines.find(item => item.id === idArtistaSeleccionadoActivo);
+            if (b) renderizarProyectos(b, document.getElementById("areaContenidoBlog"));
         }
 
         function cambiarPestana(tipo) {
