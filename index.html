@@ -708,12 +708,12 @@
                 <select id="selectorPais" class="selector-desplegable-filtro" onchange="cambiarPaisFiltro(this.value)"></select>
             </div>
             <div class="bloque-selector">
-                <label for="selectorEstado">Elegir Estado</label>
-                <select id="selectorEstado" class="selector-desplegable-filtro" onchange="cambiarEstadoFiltro(this.value)"></select>
-            </div>
-            <div class="bloque-selector">
                 <label for="selectorCiudad">Elegir Ciudad</label>
                 <select id="selectorCiudad" class="selector-desplegable-filtro" onchange="cambiarCiudadFiltro(this.value)"></select>
+            </div>
+            <div class="bloque-selector">
+                <label for="selectorEstado">Elegir Estado</label>
+                <select id="selectorEstado" class="selector-desplegable-filtro" onchange="cambiarEstadoFiltro(this.value)"></select>
             </div>
         </div>
     </div>
@@ -1056,8 +1056,8 @@
             const selectPais = document.getElementById("selectorPais");
             selectPais.innerHTML = `<option value="todos">🌍 Todos los Países (${paisesConContenido.length})</option>`;
             paisesConContenido.forEach(pais => { selectPais.innerHTML += `<option value="${pais}">${pais}</option>`; });
-            actualizarDesplegableEstados();
             actualizarDesplegableCiudades();
+            actualizarDesplegableEstados();
         }
 
         function renderizarBailarines() {
@@ -1095,36 +1095,35 @@
         }
 
         function cambiarPaisFiltro(pais) {
-            paisFiltroActual = pais; estadoFiltroActual = "todos"; ciudadFiltroActual = "todas";
-            actualizarDesplegableEstados(); actualizarDesplegableCiudades(); renderizarBailarines();
+            paisFiltroActual = pais; ciudadFiltroActual = "todas"; estadoFiltroActual = "todos";
+            actualizarDesplegableCiudades(); actualizarDesplegableEstados(); renderizarBailarines();
         }
 
-        function cambiarEstadoFiltro(estado) {
-            estadoFiltroActual = estado; ciudadFiltroActual = "todas";
-            actualizarDesplegableCiudades(); renderizarBailarines();
+        function cambiarCiudadFiltro(ciudad) {
+            ciudadFiltroActual = ciudad; estadoFiltroActual = "todos";
+            actualizarDesplegableEstados(); renderizarBailarines();
         }
 
-        function cambiarCiudadFiltro(ciudad) { ciudadFiltroActual = ciudad; renderizarBailarines(); }
-
-        function actualizarDesplegableEstados() {
-            const selectEstado = document.getElementById("selectorEstado");
-            selectEstado.innerHTML = `<option value="todos">🌍 Todos los Estados</option>`;
-            if (paisFiltroActual !== "todos") {
-                let estadosConContenido = bailarines.filter(b => b.pais.toLowerCase() === paisFiltroActual.toLowerCase() && b.estado).map(b => b.estado);
-                estadosConContenido = [...new Set(estadosConContenido)].sort();
-                estadosConContenido.forEach(est => { selectEstado.innerHTML += `<option value="${est}">${est}</option>`; });
-            }
-        }
+        function cambiarEstadoFiltro(estado) { estadoFiltroActual = estado; renderizarBailarines(); }
 
         function actualizarDesplegableCiudades() {
             const selectCiudad = document.getElementById("selectorCiudad");
             selectCiudad.innerHTML = `<option value="todas">📍 Todas las Ciudades</option>`;
             if (paisFiltroActual === "todos") return;
-            let bailarinesFiltrados = bailarines.filter(b => b.pais.toLowerCase() === paisFiltroActual.toLowerCase());
-            if (estadoFiltroActual !== "todos") { bailarinesFiltrados = bailarinesFiltrados.filter(b => b.estado === estadoFiltroActual); }
-            let ciudadesConContenido = bailarinesFiltrados.map(b => b.ciudad).filter(c => c);
+            let ciudadesConContenido = bailarines.filter(b => b.pais.toLowerCase() === paisFiltroActual.toLowerCase()).map(b => b.ciudad).filter(c => c);
             ciudadesConContenido = [...new Set(ciudadesConContenido)].sort();
             ciudadesConContenido.forEach(ciu => { selectCiudad.innerHTML += `<option value="${ciu}">${ciu}</option>`; });
+        }
+
+        function actualizarDesplegableEstados() {
+            const selectEstado = document.getElementById("selectorEstado");
+            selectEstado.innerHTML = `<option value="todos">🌍 Todos los Estados</option>`;
+            if (paisFiltroActual === "todos") return;
+            let bailarinesFiltrados = bailarines.filter(b => b.pais.toLowerCase() === paisFiltroActual.toLowerCase());
+            if (ciudadFiltroActual !== "todas") { bailarinesFiltrados = bailarinesFiltrados.filter(b => b.ciudad === ciudadFiltroActual); }
+            let estadosConContenido = bailarinesFiltrados.map(b => b.estado).filter(e => e);
+            estadosConContenido = [...new Set(estadosConContenido)].sort();
+            estadosConContenido.forEach(est => { selectEstado.innerHTML += `<option value="${est}">${est}</option>`; });
         }
 
         function abrirVisorBailarin(idBailarin) {
